@@ -1,3 +1,3 @@
-module github.com/pdfinn/cotlogger
+module github.com/NERVsystems/cotlogger
 
 go 1.24.2

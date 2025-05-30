@@ -20,7 +20,7 @@ A lightweight, standalone diagnostic tool for logging Cursor on Target (CoT) mes
 
 ```bash
 # Clone and build
-git clone https://github.com/pdfinn/cotlogger.git
+git clone https://github.com/NERVsystems/cotlogger.git
 cd cotlogger
 go build
 
@@ -38,7 +38,7 @@ go build
 
 ### From Source
 ```bash
-git clone https://github.com/pdfinn/cotlogger.git
+git clone https://github.com/NERVsystems/cotlogger.git
 cd cotlogger
 go build -o cotlogger
 ```
@@ -237,6 +237,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Related Projects
 
-- [nerv-tak](https://github.com/pdfinn/nerv-tak) - AI-powered TAK assistant (where this tool originated)
+- [nerv-tak](https://github.com/NERVsystems/nerv-tak) - AI-powered TAK assistant (where this tool originated)
 - [TAK Server](https://tak.gov/) - Official TAK Server documentation
 
