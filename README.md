@@ -27,11 +27,14 @@ go build
 # Basic usage - TCP connection
 ./cotlogger -host your-tak-server.com -port 8089 > messages.log
 
+# Stream directly to stdout
+./cotlogger -host your-tak-server.com -port 8089
+
 # SSL connection with certificates
 ./cotlogger -host secure-tak.mil -protocol ssl -cert client.crt -key client.key -ca ca.crt > secure-messages.log
 
 # JSON output for analysis tools
-./cotlogger -format json -verbose > data.json
+./cotlogger -format json > data.json
 ```
 
 ## Installation
@@ -85,8 +88,8 @@ make install            # Install to /usr/local/bin
   -protocol ssl \
   -embedded-certs \
   -format raw \
-  -reconnect 5s \
-  > /var/log/tak/cot-$(date +%Y%m%d).log
+  > /var/log/tak/cot-$(date +%Y%m%d).log \
+  -reconnect 5s
 ```
 
 ## Command Line Options
@@ -189,7 +192,7 @@ Monitor TAK traffic patterns, connection issues, and message flow:
 ### Security Analysis
 Capture traffic for security auditing and threat analysis:
 ```bash
-./cotlogger -format json -verbose > audit-$(date +%Y%m%d).json
+./cotlogger -format json > audit-$(date +%Y%m%d).json
 ```
 
 ### Performance Testing
