@@ -68,6 +68,7 @@ type Config struct {
 	ReadTimeout       time.Duration
 	OutputFormat      string // raw, formatted, json
 	Verbose           bool
+	Handshake         string
 }
 
 // CoTLogger represents the main logger instance
@@ -108,6 +109,7 @@ func main() {
 		reconnectInterval = flag.Duration("reconnect", 30*time.Second, "Reconnection interval")
 		readTimeout       = flag.Duration("read-timeout", 30*time.Second, "Read timeout")
 		writeTimeout      = flag.Duration("write-timeout", 30*time.Second, "Write timeout")
+		handshake         = flag.String("handshake", "<takserver><subscribe>event</subscribe></takserver>", "Handshake message")
 		verbose           = flag.Bool("verbose", false, "Enable verbose logging")
 		showVersion       = flag.Bool("version", false, "Show version information")
 	)
@@ -146,6 +148,7 @@ func main() {
 		ReadTimeout:       *readTimeout,
 		OutputFormat:      *outputFormat,
 		Verbose:           *verbose,
+		Handshake:         *handshake,
 	}
 
 	// Validate configuration
@@ -254,16 +257,17 @@ func (c *CoTLogger) connect(ctx context.Context) error {
 
 	c.conn = conn
 	c.reader = bufio.NewReader(conn)
-	if err := c.sendHello(); err != nil {
-		conn.Close()
-		c.conn = nil
-		c.reader = nil
-		return fmt.Errorf("failed to send hello: %w", err)
-	}
 	c.logger.Info("connected to TAK server",
 		"host", c.config.Host,
 		"port", c.config.Port,
 		"protocol", c.config.Protocol)
+
+	if err := c.sendHandshake(); err != nil {
+		conn.Close()
+		c.conn = nil
+		c.reader = nil
+		return fmt.Errorf("handshake failed: %w", err)
+	}
 
 	return nil
 }
@@ -340,20 +344,25 @@ func (c *CoTLogger) connectSSL() (net.Conn, error) {
 	return tlsConn, nil
 }
 
-// sendHello sends the initial handshake message after connecting.
-func (c *CoTLogger) sendHello() error {
-	c.mu.RLock()
-	conn := c.conn
-	c.mu.RUnlock()
-	if conn == nil {
-		return fmt.Errorf("connection is nil")
+// sendHandshake writes the initial subscription message to the server
+func (c *CoTLogger) sendHandshake() error {
+	if c.config.Handshake == "" {
+		return nil
 	}
+
+	msg := c.config.Handshake
+	// append newline if no terminator provided
+	if !strings.HasSuffix(msg, "\n") && !strings.HasSuffix(msg, "\x00") {
+		msg += "\n"
+	}
+
 	if c.config.WriteTimeout > 0 {
-		if err := conn.SetWriteDeadline(time.Now().Add(c.config.WriteTimeout)); err != nil {
+		if err := c.conn.SetWriteDeadline(time.Now().Add(c.config.WriteTimeout)); err != nil {
 			return fmt.Errorf("failed to set write deadline: %w", err)
 		}
 	}
-	_, err := conn.Write([]byte(helloMessage))
+
+	_, err := c.conn.Write([]byte(msg))
 	return err
 }
 
@@ -404,19 +413,30 @@ func (c *CoTLogger) readMessage() (string, error) {
 		return "", fmt.Errorf("connection is nil")
 	}
 
-	if c.config.ReadTimeout > 0 {
-		if err := conn.SetReadDeadline(time.Now().Add(c.config.ReadTimeout)); err != nil {
-			return "", fmt.Errorf("failed to set read deadline: %w", err)
+	var buf bytes.Buffer
+	for {
+		if c.config.ReadTimeout > 0 {
+			if err := conn.SetReadDeadline(time.Now().Add(c.config.ReadTimeout)); err != nil {
+				return "", fmt.Errorf("failed to set read deadline: %w", err)
+			}
 		}
+
+		b, err := reader.ReadByte()
+		if err != nil {
+			if err == io.EOF && buf.Len() > 0 {
+				break
+			}
+			return "", err
+		}
+
+		if b == '\n' || b == 0x00 {
+			break
+		}
+
+		buf.WriteByte(b)
 	}
 
-	data, err := reader.ReadBytes('\n')
-	if err != nil {
-		return "", err
-	}
-
-	data = bytes.TrimRight(data, "\x00\r\n")
-	data, err = decompressIfNeeded(data)
+	data, err := decompressIfNeeded(buf.Bytes())
 	if err != nil {
 		return "", err
 	}
@@ -541,4 +561,33 @@ func isTimeout(err error) bool {
 		return netErr.Timeout()
 	}
 	return false
+}
+
+// decompressIfNeeded decompresses gzip or zlib data if detected
+func decompressIfNeeded(data []byte) ([]byte, error) {
+	if len(data) < 2 {
+		return data, nil
+	}
+
+	// gzip
+	if data[0] == 0x1f && data[1] == 0x8b {
+		r, err := gzip.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		defer r.Close()
+		return io.ReadAll(r)
+	}
+
+	// zlib
+	if data[0] == 0x78 {
+		r, err := zlib.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		defer r.Close()
+		return io.ReadAll(r)
+	}
+
+	return data, nil
 }

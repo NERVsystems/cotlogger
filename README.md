@@ -37,6 +37,9 @@ go build
 ./cotlogger -format json > data.json
 ```
 
+### Handshake Behavior
+After connecting, `cotlogger` sends `<takserver><subscribe>event</subscribe></takserver>` to request the event stream. Some servers expect a simpler `<hello/>` message. Use the `-handshake` flag to change this if needed.
+
 ## Installation
 
 ### From Source
@@ -107,6 +110,7 @@ make install            # Install to /usr/local/bin
 | `-reconnect` | `30s` | Reconnection interval |
 | `-read-timeout` | `30s` | Socket read timeout |
 | `-write-timeout` | `30s` | Socket write timeout |
+| `-handshake` | `<takserver><subscribe>event</subscribe></takserver>` | Initial subscription message |
 | `-verbose` | `false` | Enable verbose logging |
 | `-version` | `false` | Show version information |
 
