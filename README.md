@@ -25,13 +25,13 @@ cd cotlogger
 go build
 
 # Basic usage - TCP connection
-./cotlogger -host your-tak-server.com -port 8089 -output messages.log
+./cotlogger -host your-tak-server.com -port 8089 > messages.log
 
 # SSL connection with certificates
-./cotlogger -host secure-tak.mil -protocol ssl -cert client.crt -key client.key -ca ca.crt
+./cotlogger -host secure-tak.mil -protocol ssl -cert client.crt -key client.key -ca ca.crt > secure-messages.log
 
 # JSON output for analysis tools
-./cotlogger -format json -output data.json -verbose
+./cotlogger -format json -verbose > data.json
 ```
 
 ## Installation
@@ -59,7 +59,7 @@ make install            # Install to /usr/local/bin
 
 ### Basic TCP Monitoring
 ```bash
-./cotlogger -host tak.example.com -port 8089 -output messages.log -verbose
+./cotlogger -host tak.example.com -port 8089 -verbose > messages.log
 ```
 
 ### Secure SSL Connection
@@ -70,12 +70,12 @@ make install            # Install to /usr/local/bin
   -cert /path/to/client.crt \
   -key /path/to/client.key \
   -ca /path/to/ca.crt \
-  -output secure-messages.log
+  > secure-messages.log
 ```
 
 ### JSON Output for Analysis
 ```bash
-./cotlogger -format json -output cot-data.json -verbose
+./cotlogger -format json -verbose > cot-data.json
 ```
 
 ### High-Volume Production Monitoring
@@ -85,8 +85,8 @@ make install            # Install to /usr/local/bin
   -protocol ssl \
   -embedded-certs \
   -format raw \
-  -output /var/log/tak/cot-$(date +%Y%m%d).log \
-  -reconnect 5s
+  -reconnect 5s \
+  > /var/log/tak/cot-$(date +%Y%m%d).log
 ```
 
 ## Command Line Options
@@ -100,7 +100,6 @@ make install            # Install to /usr/local/bin
 | `-cert` | | Client certificate file (SSL mode) |
 | `-key` | | Client private key file (SSL mode) |
 | `-ca` | | CA certificate file (SSL mode) |
-| `-output` | `cotlogger.log` | Output log file path |
 | `-format` | `formatted` | Output format (`raw`, `formatted`, `json`) |
 | `-reconnect` | `30s` | Reconnection interval |
 | `-read-timeout` | `30s` | Socket read timeout |
@@ -190,13 +189,13 @@ Monitor TAK traffic patterns, connection issues, and message flow:
 ### Security Analysis
 Capture traffic for security auditing and threat analysis:
 ```bash
-./cotlogger -format json -output audit-$(date +%Y%m%d).json
+./cotlogger -format json -verbose > audit-$(date +%Y%m%d).json
 ```
 
 ### Performance Testing
 Monitor high-volume environments:
 ```bash
-./cotlogger -format raw -output perf-test.log -verbose
+./cotlogger -format raw -verbose > perf-test.log
 ```
 
 ### Development & Debugging
