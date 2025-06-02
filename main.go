@@ -221,6 +221,14 @@ func (c *CoTLogger) Run(ctx context.Context) error {
 				continue
 			}
 
+			// Send handshake message if configured
+			if err := c.sendHandshake(); err != nil {
+				c.logger.Error("handshake failed", "error", err)
+				c.handleConnectionError(err)
+				time.Sleep(c.config.ReconnectInterval)
+				continue
+			}
+
 			// Start message processing
 			if err := c.processMessages(ctx); err != nil {
 				c.logger.Error("message processing error", "error", err)
@@ -248,7 +256,8 @@ func (c *CoTLogger) connect(ctx context.Context) error {
 		conn, err = c.connectSSL()
 	} else {
 		c.logger.Warn("using insecure TCP connection")
-		conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", c.config.Host, c.config.Port))
+		dialer := &net.Dialer{Timeout: 10 * time.Second}
+		conn, err = dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", c.config.Host, c.config.Port))
 	}
 
 	if err != nil {
@@ -261,13 +270,6 @@ func (c *CoTLogger) connect(ctx context.Context) error {
 		"host", c.config.Host,
 		"port", c.config.Port,
 		"protocol", c.config.Protocol)
-
-	if err := c.sendHandshake(); err != nil {
-		conn.Close()
-		c.conn = nil
-		c.reader = nil
-		return fmt.Errorf("handshake failed: %w", err)
-	}
 
 	return nil
 }
@@ -344,26 +346,33 @@ func (c *CoTLogger) connectSSL() (net.Conn, error) {
 	return tlsConn, nil
 }
 
-// sendHandshake writes the initial subscription message to the server
+// sendHandshake sends initial handshake message to the TAK server
 func (c *CoTLogger) sendHandshake() error {
 	if c.config.Handshake == "" {
 		return nil
 	}
 
-	msg := c.config.Handshake
-	// append newline if no terminator provided
-	if !strings.HasSuffix(msg, "\n") && !strings.HasSuffix(msg, "\x00") {
-		msg += "\n"
+	c.mu.RLock()
+	conn := c.conn
+	c.mu.RUnlock()
+
+	if conn == nil {
+		return fmt.Errorf("connection is nil")
 	}
 
 	if c.config.WriteTimeout > 0 {
-		if err := c.conn.SetWriteDeadline(time.Now().Add(c.config.WriteTimeout)); err != nil {
+		if err := conn.SetWriteDeadline(time.Now().Add(c.config.WriteTimeout)); err != nil {
 			return fmt.Errorf("failed to set write deadline: %w", err)
 		}
 	}
 
-	_, err := c.conn.Write([]byte(msg))
-	return err
+	_, err := conn.Write([]byte(c.config.Handshake))
+	if err != nil {
+		return fmt.Errorf("failed to send handshake: %w", err)
+	}
+
+	c.logger.Debug("sent handshake message", "message", c.config.Handshake)
+	return nil
 }
 
 // processMessages handles the message processing loop
@@ -561,33 +570,4 @@ func isTimeout(err error) bool {
 		return netErr.Timeout()
 	}
 	return false
-}
-
-// decompressIfNeeded decompresses gzip or zlib data if detected
-func decompressIfNeeded(data []byte) ([]byte, error) {
-	if len(data) < 2 {
-		return data, nil
-	}
-
-	// gzip
-	if data[0] == 0x1f && data[1] == 0x8b {
-		r, err := gzip.NewReader(bytes.NewReader(data))
-		if err != nil {
-			return nil, err
-		}
-		defer r.Close()
-		return io.ReadAll(r)
-	}
-
-	// zlib
-	if data[0] == 0x78 {
-		r, err := zlib.NewReader(bytes.NewReader(data))
-		if err != nil {
-			return nil, err
-		}
-		defer r.Close()
-		return io.ReadAll(r)
-	}
-
-	return data, nil
 }

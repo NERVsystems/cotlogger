@@ -62,12 +62,12 @@ test:
 
 # Run with sample configuration
 run-tcp:
-    @echo "Running cotlogger with TCP connection..."
-    ./$(BINARY_NAME) -host localhost -port 8089 -protocol tcp -verbose > test.log
+	@echo "Running cotlogger with TCP connection..."
+	./$(BINARY_NAME) -host localhost -port 8089 -protocol tcp -verbose
 
 run-ssl:
-    @echo "Running cotlogger with SSL connection..."
-    ./$(BINARY_NAME) -host localhost -port 8089 -protocol ssl -cert certs/client.crt -key certs/client.key -ca certs/ca.crt -verbose > test-ssl.log
+	@echo "Running cotlogger with SSL connection..."
+	./$(BINARY_NAME) -host localhost -port 8089 -protocol ssl -cert certs/client.crt -key certs/client.key -ca certs/ca.crt -verbose
 
 # Development helpers
 dev: build run-tcp
