@@ -31,7 +31,7 @@ go build
 ./cotlogger -host your-tak-server.com -port 8089
 
 # SSL connection with certificates
-./cotlogger -host secure-tak.mil -protocol ssl -cert client.crt -key client.key -ca ca.crt
+./cotlogger -host secure-tak.mil -protocol ssl -cert client.crt -key client.key -ca ca.crt > secure-messages.log
 
 # JSON output for analysis tools
 ./cotlogger -format json > data.json
