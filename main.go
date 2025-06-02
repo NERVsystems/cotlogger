@@ -21,7 +21,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -49,6 +48,10 @@ const (
 	embeddedCA = `-----BEGIN CERTIFICATE-----
 // Replace with your actual CA certificate
 -----END CERTIFICATE-----`
+
+	// Minimal hello message sent after connecting. Adjust as needed for
+	// your TAK server's expected handshake.
+	helloMessage = `<hello version="1.0" uid="cotlogger"/>\n`
 )
 
 // Config holds connection configuration
@@ -63,7 +66,6 @@ type Config struct {
 	ReconnectInterval time.Duration
 	WriteTimeout      time.Duration
 	ReadTimeout       time.Duration
-	OutputFile        string
 	OutputFormat      string // raw, formatted, json
 	Verbose           bool
 	Handshake         string
@@ -77,7 +79,6 @@ type CoTLogger struct {
 	reader       *bufio.Reader
 	mu           sync.RWMutex
 	done         chan struct{}
-	outputFile   *os.File
 	outputMu     sync.Mutex
 	messageCount int64
 }
@@ -104,7 +105,6 @@ func main() {
 		certFile          = flag.String("cert", "", "Client certificate file (for SSL)")
 		keyFile           = flag.String("key", "", "Client private key file (for SSL)")
 		caFile            = flag.String("ca", "", "CA certificate file (for SSL)")
-		outputFile        = flag.String("output", "cotlogger.log", "Output log file")
 		outputFormat      = flag.String("format", "formatted", "Output format: raw, formatted, json")
 		reconnectInterval = flag.Duration("reconnect", 30*time.Second, "Reconnection interval")
 		readTimeout       = flag.Duration("read-timeout", 30*time.Second, "Read timeout")
@@ -146,7 +146,6 @@ func main() {
 		ReconnectInterval: *reconnectInterval,
 		WriteTimeout:      *writeTimeout,
 		ReadTimeout:       *readTimeout,
-		OutputFile:        *outputFile,
 		OutputFormat:      *outputFormat,
 		Verbose:           *verbose,
 		Handshake:         *handshake,
@@ -187,7 +186,6 @@ func main() {
 		"host", config.Host,
 		"port", config.Port,
 		"protocol", config.Protocol,
-		"output", config.OutputFile,
 		"format", config.OutputFormat)
 
 	if err := cotLogger.Run(ctx); err != nil {
@@ -206,38 +204,7 @@ func NewCoTLogger(config Config, logger *slog.Logger) (*CoTLogger, error) {
 		done:   make(chan struct{}),
 	}
 
-	// Setup output file
-	if err := cotLogger.initOutputFile(); err != nil {
-		return nil, fmt.Errorf("failed to initialize output file: %w", err)
-	}
-
 	return cotLogger, nil
-}
-
-// initOutputFile initializes the output log file
-func (c *CoTLogger) initOutputFile() error {
-	// Ensure directory exists
-	dir := filepath.Dir(c.config.OutputFile)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	// Open output file
-	file, err := os.OpenFile(c.config.OutputFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open output file: %w", err)
-	}
-
-	c.outputFile = file
-
-	// Write header
-	header := fmt.Sprintf("\n=== CoT Logger Started at %s ===\n", time.Now().UTC().Format(time.RFC3339))
-	if _, err := file.WriteString(header); err != nil {
-		return fmt.Errorf("failed to write header: %w", err)
-	}
-
-	c.logger.Info("output file initialized", "file", c.config.OutputFile)
-	return nil
 }
 
 // Run starts the CoT logger main loop
@@ -496,14 +463,12 @@ func (c *CoTLogger) logMessage(rawMsg string) error {
 		logEntry = fmt.Sprintf("\n=== %s - INCOMING ===\n%s\n", timestamp, rawMsg)
 	}
 
-	if _, err := c.outputFile.WriteString(logEntry); err != nil {
+	if _, err := fmt.Fprint(os.Stdout, logEntry); err != nil {
 		return fmt.Errorf("failed to write log entry: %w", err)
 	}
 
 	// Flush immediately for real-time logging
-	if err := c.outputFile.Sync(); err != nil {
-		return fmt.Errorf("failed to flush log: %w", err)
-	}
+	os.Stdout.Sync()
 
 	return nil
 }
@@ -516,6 +481,32 @@ func (c *CoTLogger) formatAsJSON(timestamp, rawMsg string) string {
 	escapedMsg = strings.ReplaceAll(escapedMsg, "\r", "\\r")
 
 	return fmt.Sprintf(`{"timestamp":"%s","message":"%s"}`+"\n", timestamp, escapedMsg)
+}
+
+// decompressIfNeeded decompresses zlib or gzip encoded data if detected.
+func decompressIfNeeded(data []byte) ([]byte, error) {
+	if len(data) >= 2 {
+		// gzip header
+		if data[0] == 0x1f && data[1] == 0x8b {
+			r, err := gzip.NewReader(bytes.NewReader(data))
+			if err != nil {
+				return nil, err
+			}
+			defer r.Close()
+			return io.ReadAll(r)
+		}
+
+		// zlib header
+		if data[0] == 0x78 && (data[1] == 0x9c || data[1] == 0x01 || data[1] == 0xda) {
+			r, err := zlib.NewReader(bytes.NewReader(data))
+			if err != nil {
+				return nil, err
+			}
+			defer r.Close()
+			return io.ReadAll(r)
+		}
+	}
+	return data, nil
 }
 
 // extractType extracts the message type from raw XML
@@ -554,17 +545,6 @@ func (c *CoTLogger) Close() error {
 			errs = append(errs, fmt.Errorf("failed to close connection: %w", err))
 		}
 		c.conn = nil
-	}
-
-	if c.outputFile != nil {
-		// Write footer
-		footer := fmt.Sprintf("\n=== CoT Logger Stopped at %s ===\n", time.Now().UTC().Format(time.RFC3339))
-		c.outputFile.WriteString(footer)
-
-		if err := c.outputFile.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close output file: %w", err))
-		}
-		c.outputFile = nil
 	}
 
 	if len(errs) > 0 {
