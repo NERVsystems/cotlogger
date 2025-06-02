@@ -10,23 +10,23 @@ make build
 echo
 
 echo "1. Basic TCP connection:"
-echo "./cotlogger -host localhost -port 8089 -output test-tcp.log -verbose"
+echo "./cotlogger -host localhost -port 8089 -verbose > test-tcp.log"
 echo
 
 echo "2. SSL connection with certificate files:"
-echo "./cotlogger -host secure-tak.mil -protocol ssl -cert client.crt -key client.key -ca ca.crt -output test-ssl.log"
+echo "./cotlogger -host secure-tak.mil -protocol ssl -cert client.crt -key client.key -ca ca.crt > test-ssl.log"
 echo
 
 echo "3. JSON output for analysis:"
-echo "./cotlogger -format json -output test.json -verbose"
+echo "./cotlogger -format json -verbose > test.json"
 echo
 
 echo "4. Raw output with custom reconnect interval:"
-echo "./cotlogger -format raw -output test-raw.log -reconnect 10s -verbose"
+echo "./cotlogger -format raw -reconnect 10s -verbose > test-raw.log"
 echo
 
 echo "5. High-volume monitoring with embedded certs:"
-echo "./cotlogger -protocol ssl -embedded-certs -format raw -output production.log"
+echo "./cotlogger -protocol ssl -embedded-certs -format raw > production.log"
 echo
 
 echo "Run any of these commands after updating the hostnames and certificate paths!"

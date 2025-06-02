@@ -17,7 +17,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -59,7 +58,6 @@ type Config struct {
 	ReconnectInterval time.Duration
 	WriteTimeout      time.Duration
 	ReadTimeout       time.Duration
-	OutputFile        string
 	OutputFormat      string // raw, formatted, json
 	Verbose           bool
 }
@@ -98,7 +96,6 @@ func main() {
 		certFile          = flag.String("cert", "", "Client certificate file (for SSL)")
 		keyFile           = flag.String("key", "", "Client private key file (for SSL)")
 		caFile            = flag.String("ca", "", "CA certificate file (for SSL)")
-		outputFile        = flag.String("output", "cotlogger.log", "Output log file")
 		outputFormat      = flag.String("format", "formatted", "Output format: raw, formatted, json")
 		reconnectInterval = flag.Duration("reconnect", 30*time.Second, "Reconnection interval")
 		readTimeout       = flag.Duration("read-timeout", 30*time.Second, "Read timeout")
@@ -139,7 +136,6 @@ func main() {
 		ReconnectInterval: *reconnectInterval,
 		WriteTimeout:      *writeTimeout,
 		ReadTimeout:       *readTimeout,
-		OutputFile:        *outputFile,
 		OutputFormat:      *outputFormat,
 		Verbose:           *verbose,
 	}
@@ -179,7 +175,6 @@ func main() {
 		"host", config.Host,
 		"port", config.Port,
 		"protocol", config.Protocol,
-		"output", config.OutputFile,
 		"format", config.OutputFormat)
 
 	if err := cotLogger.Run(ctx); err != nil {
@@ -198,37 +193,17 @@ func NewCoTLogger(config Config, logger *slog.Logger) (*CoTLogger, error) {
 		done:   make(chan struct{}),
 	}
 
-	// Setup output file
+	// Setup output
 	if err := cotLogger.initOutputFile(); err != nil {
-		return nil, fmt.Errorf("failed to initialize output file: %w", err)
+		return nil, fmt.Errorf("failed to initialize output: %w", err)
 	}
 
 	return cotLogger, nil
 }
 
-// initOutputFile initializes the output log file
+// initOutputFile sets the output writer to stdout
 func (c *CoTLogger) initOutputFile() error {
-	// Ensure directory exists
-	dir := filepath.Dir(c.config.OutputFile)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	// Open output file
-	file, err := os.OpenFile(c.config.OutputFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open output file: %w", err)
-	}
-
-	c.outputFile = file
-
-	// Write header
-	header := fmt.Sprintf("\n=== CoT Logger Started at %s ===\n", time.Now().UTC().Format(time.RFC3339))
-	if _, err := file.WriteString(header); err != nil {
-		return fmt.Errorf("failed to write header: %w", err)
-	}
-
-	c.logger.Info("output file initialized", "file", c.config.OutputFile)
+	c.outputFile = os.Stdout
 	return nil
 }
 
@@ -502,11 +477,7 @@ func (c *CoTLogger) Close() error {
 		c.conn = nil
 	}
 
-	if c.outputFile != nil {
-		// Write footer
-		footer := fmt.Sprintf("\n=== CoT Logger Stopped at %s ===\n", time.Now().UTC().Format(time.RFC3339))
-		c.outputFile.WriteString(footer)
-
+	if c.outputFile != nil && c.outputFile != os.Stdout {
 		if err := c.outputFile.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to close output file: %w", err))
 		}
