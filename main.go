@@ -117,9 +117,9 @@ func main() {
 
 	// Show version if requested
 	if *showVersion {
-		fmt.Printf("cotlogger %s\n", version)
-		fmt.Printf("Built: %s\n", buildTime)
-		fmt.Printf("Go: %s\n", goVersion)
+		fmt.Fprintf(os.Stderr, "cotlogger %s\n", version)
+		fmt.Fprintf(os.Stderr, "Built: %s\n", buildTime)
+		fmt.Fprintf(os.Stderr, "Go: %s\n", goVersion)
 		return
 	}
 
@@ -129,7 +129,7 @@ func main() {
 		logLevel = slog.LevelDebug
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level:     logLevel,
 		AddSource: true,
 	}))
